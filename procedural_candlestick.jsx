@@ -326,18 +326,37 @@
             'var current = controls.effect("Current Second")("Slider");\n' +
             'var progress = clamp(current - idx, 0, 1);\n' +
             'var open = thisLayer.effect("Open")("Slider");\n' +
-            'var close = thisLayer.effect("Close")("Slider");\n' +
             'var high = thisLayer.effect("High")("Slider");\n' +
             'var low = thisLayer.effect("Low")("Slider");\n' +
+            'var close = thisLayer.effect("Close")("Slider");\n' +
+            'var segHigh = 0.28;\n' +
+            'var segLow = 0.68;\n' +
+            'if (segHigh <= 0) segHigh = 0.25;\n' +
+            'if (segLow <= segHigh) segLow = segHigh + 0.2;\n' +
+            'var upSpan = Math.max(0.0001, segHigh);\n' +
+            'var downSpan = Math.max(0.0001, segLow - segHigh);\n' +
+            'var closeSpan = Math.max(0.0001, 1 - segLow);\n' +
+            'function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }\n' +
+            'function priceAt(p) {\n' +
+            '  if (p <= 0) return open;\n' +
+            '  if (p < segHigh) return lerp(open, high, p / upSpan);\n' +
+            '  if (p < segLow) return lerp(high, low, (p - segHigh) / downSpan);\n' +
+            '  if (p >= 1) return close;\n' +
+            '  return lerp(low, close, (p - segLow) / closeSpan);\n' +
+            '}\n' +
+            'var live = priceAt(progress);\n' +
+            'var maxPrice = Math.max(open, live);\n' +
+            'var minPrice = Math.min(open, live);\n' +
+            'if (progress >= segHigh) maxPrice = Math.max(maxPrice, high);\n' +
+            'if (progress >= segLow) minPrice = Math.min(minPrice, low);\n' +
+            'if (progress >= 1) {\n' +
+            '  maxPrice = Math.max(maxPrice, close);\n' +
+            '  minPrice = Math.min(minPrice, close);\n' +
+            '}\n' +
             'var priceMax = controls.effect("Price Max")("Slider");\n' +
             'var px = controls.effect("Price Scale")("Slider");\n' +
-            'var liveClose = open + (close - open) * progress;\n' +
-            'var baseHigh = Math.max(open, liveClose);\n' +
-            'var baseLow = Math.min(open, liveClose);\n' +
-            'var liveHigh = baseHigh + (Math.max(high, baseHigh) - baseHigh) * progress;\n' +
-            'var liveLow = baseLow + (Math.min(low, baseLow) - baseLow) * progress;\n' +
-            'var highY = (priceMax - liveHigh) * px;\n' +
-            'var lowY = (priceMax - liveLow) * px;\n' +
+            'var highY = (priceMax - maxPrice) * px;\n' +
+            'var lowY = (priceMax - minPrice) * px;\n' +
             '[0, (highY + lowY) / 2];';
         wickShape.property("ADBE Vector Rect Size").expression =
             'var controls = thisComp.layer("Chart Controls");\n' +
@@ -345,17 +364,36 @@
             'var current = controls.effect("Current Second")("Slider");\n' +
             'var progress = clamp(current - idx, 0, 1);\n' +
             'var open = thisLayer.effect("Open")("Slider");\n' +
-            'var close = thisLayer.effect("Close")("Slider");\n' +
             'var high = thisLayer.effect("High")("Slider");\n' +
             'var low = thisLayer.effect("Low")("Slider");\n' +
+            'var close = thisLayer.effect("Close")("Slider");\n' +
+            'var segHigh = 0.28;\n' +
+            'var segLow = 0.68;\n' +
+            'if (segHigh <= 0) segHigh = 0.25;\n' +
+            'if (segLow <= segHigh) segLow = segHigh + 0.2;\n' +
+            'var upSpan = Math.max(0.0001, segHigh);\n' +
+            'var downSpan = Math.max(0.0001, segLow - segHigh);\n' +
+            'var closeSpan = Math.max(0.0001, 1 - segLow);\n' +
+            'function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }\n' +
+            'function priceAt(p) {\n' +
+            '  if (p <= 0) return open;\n' +
+            '  if (p < segHigh) return lerp(open, high, p / upSpan);\n' +
+            '  if (p < segLow) return lerp(high, low, (p - segHigh) / downSpan);\n' +
+            '  if (p >= 1) return close;\n' +
+            '  return lerp(low, close, (p - segLow) / closeSpan);\n' +
+            '}\n' +
+            'var live = priceAt(progress);\n' +
+            'var maxPrice = Math.max(open, live);\n' +
+            'var minPrice = Math.min(open, live);\n' +
+            'if (progress >= segHigh) maxPrice = Math.max(maxPrice, high);\n' +
+            'if (progress >= segLow) minPrice = Math.min(minPrice, low);\n' +
+            'if (progress >= 1) {\n' +
+            '  maxPrice = Math.max(maxPrice, close);\n' +
+            '  minPrice = Math.min(minPrice, close);\n' +
+            '}\n' +
             'var px = controls.effect("Price Scale")("Slider");\n' +
-            'var liveClose = open + (close - open) * progress;\n' +
-            'var baseHigh = Math.max(open, liveClose);\n' +
-            'var baseLow = Math.min(open, liveClose);\n' +
-            'var liveHigh = baseHigh + (Math.max(high, baseHigh) - baseHigh) * progress;\n' +
-            'var liveLow = baseLow + (Math.min(low, baseLow) - baseLow) * progress;\n' +
-            'var height = Math.max(2, Math.abs(liveHigh - liveLow) * px);\n' +
             'var width = Math.max(1, thisComp.layer("Chart Controls").effect("Candle Width")("Slider") * 0.18);\n' +
+            'var height = Math.max(2, Math.abs(maxPrice - minPrice) * px);\n' +
             '[width, height];';
 
         var wickFill = wickGroupLayer.property("ADBE Vectors Group").addProperty("ADBE Vector Graphic - Fill");
@@ -373,24 +411,58 @@
             'var current = controls.effect("Current Second")("Slider");\n' +
             'var progress = clamp(current - idx, 0, 1);\n' +
             'var open = thisLayer.effect("Open")("Slider");\n' +
+            'var high = thisLayer.effect("High")("Slider");\n' +
+            'var low = thisLayer.effect("Low")("Slider");\n' +
             'var close = thisLayer.effect("Close")("Slider");\n' +
+            'var segHigh = 0.28;\n' +
+            'var segLow = 0.68;\n' +
+            'if (segHigh <= 0) segHigh = 0.25;\n' +
+            'if (segLow <= segHigh) segLow = segHigh + 0.2;\n' +
+            'var upSpan = Math.max(0.0001, segHigh);\n' +
+            'var downSpan = Math.max(0.0001, segLow - segHigh);\n' +
+            'var closeSpan = Math.max(0.0001, 1 - segLow);\n' +
+            'function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }\n' +
+            'function priceAt(p) {\n' +
+            '  if (p <= 0) return open;\n' +
+            '  if (p < segHigh) return lerp(open, high, p / upSpan);\n' +
+            '  if (p < segLow) return lerp(high, low, (p - segHigh) / downSpan);\n' +
+            '  if (p >= 1) return close;\n' +
+            '  return lerp(low, close, (p - segLow) / closeSpan);\n' +
+            '}\n' +
+            'var live = priceAt(progress);\n' +
             'var priceMax = controls.effect("Price Max")("Slider");\n' +
             'var px = controls.effect("Price Scale")("Slider");\n' +
-            'var liveClose = open + (close - open) * progress;\n' +
             'var openY = (priceMax - open) * px;\n' +
-            'var closeY = (priceMax - liveClose) * px;\n' +
-            '[0, (openY + closeY) / 2];';
+            'var liveY = (priceMax - live) * px;\n' +
+            '[0, (openY + liveY) / 2];';
         bodyShape.property("ADBE Vector Rect Size").expression =
             'var controls = thisComp.layer("Chart Controls");\n' +
             'var idx = thisLayer.effect("Candle Index")("Slider");\n' +
             'var current = controls.effect("Current Second")("Slider");\n' +
             'var progress = clamp(current - idx, 0, 1);\n' +
             'var open = thisLayer.effect("Open")("Slider");\n' +
+            'var high = thisLayer.effect("High")("Slider");\n' +
+            'var low = thisLayer.effect("Low")("Slider");\n' +
             'var close = thisLayer.effect("Close")("Slider");\n' +
+            'var segHigh = 0.28;\n' +
+            'var segLow = 0.68;\n' +
+            'if (segHigh <= 0) segHigh = 0.25;\n' +
+            'if (segLow <= segHigh) segLow = segHigh + 0.2;\n' +
+            'var upSpan = Math.max(0.0001, segHigh);\n' +
+            'var downSpan = Math.max(0.0001, segLow - segHigh);\n' +
+            'var closeSpan = Math.max(0.0001, 1 - segLow);\n' +
+            'function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }\n' +
+            'function priceAt(p) {\n' +
+            '  if (p <= 0) return open;\n' +
+            '  if (p < segHigh) return lerp(open, high, p / upSpan);\n' +
+            '  if (p < segLow) return lerp(high, low, (p - segHigh) / downSpan);\n' +
+            '  if (p >= 1) return close;\n' +
+            '  return lerp(low, close, (p - segLow) / closeSpan);\n' +
+            '}\n' +
+            'var live = priceAt(progress);\n' +
             'var px = controls.effect("Price Scale")("Slider");\n' +
             'var width = controls.effect("Candle Width")("Slider");\n' +
-            'var liveClose = open + (close - open) * progress;\n' +
-            'var height = Math.max(2, Math.abs(liveClose - open) * px);\n' +
+            'var height = Math.max(2, Math.abs(live - open) * px);\n' +
             '[width, height];';
 
         var bodyFill = bodyGroupLayer.property("ADBE Vectors Group").addProperty("ADBE Vector Graphic - Fill");
@@ -400,11 +472,28 @@
             'var current = controls.effect("Current Second")("Slider");\n' +
             'var progress = clamp(current - idx, 0, 1);\n' +
             'var open = thisLayer.effect("Open")("Slider");\n' +
+            'var high = thisLayer.effect("High")("Slider");\n' +
+            'var low = thisLayer.effect("Low")("Slider");\n' +
             'var close = thisLayer.effect("Close")("Slider");\n' +
-            'var liveClose = open + (close - open) * progress;\n' +
+            'var segHigh = 0.28;\n' +
+            'var segLow = 0.68;\n' +
+            'if (segHigh <= 0) segHigh = 0.25;\n' +
+            'if (segLow <= segHigh) segLow = segHigh + 0.2;\n' +
+            'var upSpan = Math.max(0.0001, segHigh);\n' +
+            'var downSpan = Math.max(0.0001, segLow - segHigh);\n' +
+            'var closeSpan = Math.max(0.0001, 1 - segLow);\n' +
+            'function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }\n' +
+            'function priceAt(p) {\n' +
+            '  if (p <= 0) return open;\n' +
+            '  if (p < segHigh) return lerp(open, high, p / upSpan);\n' +
+            '  if (p < segLow) return lerp(high, low, (p - segHigh) / downSpan);\n' +
+            '  if (p >= 1) return close;\n' +
+            '  return lerp(low, close, (p - segLow) / closeSpan);\n' +
+            '}\n' +
+            'var live = priceAt(progress);\n' +
             'var bull = controls.effect("Bull Color")("Color");\n' +
             'var bear = controls.effect("Bear Color")("Color");\n' +
-            '(liveClose >= open) ? bull : bear;';
+            '(live >= open) ? bull : bear;';
     }
 
     /**
@@ -432,8 +521,25 @@
         'try {\n' +
         '  var candle = thisComp.layer(name);\n' +
         '  var open = candle.effect("Open")("Slider");\n' +
+        '  var high = candle.effect("High")("Slider");\n' +
+        '  var low = candle.effect("Low")("Slider");\n' +
         '  var close = candle.effect("Close")("Slider");\n' +
-        '  var live = open + (close - open) * frac;\n' +
+        '  var segHigh = 0.28;\n' +
+        '  var segLow = 0.68;\n' +
+        '  if (segHigh <= 0) segHigh = 0.25;\n' +
+        '  if (segLow <= segHigh) segLow = segHigh + 0.2;\n' +
+        '  var upSpan = Math.max(0.0001, segHigh);\n' +
+        '  var downSpan = Math.max(0.0001, segLow - segHigh);\n' +
+        '  var closeSpan = Math.max(0.0001, 1 - segLow);\n' +
+        '  function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }\n' +
+        '  function priceAt(p) {\n' +
+        '    if (p <= 0) return open;\n' +
+        '    if (p < segHigh) return lerp(open, high, p / upSpan);\n' +
+        '    if (p < segLow) return lerp(high, low, (p - segHigh) / downSpan);\n' +
+        '    if (p >= 1) return close;\n' +
+        '    return lerp(low, close, (p - segLow) / closeSpan);\n' +
+        '  }\n' +
+        '  var live = priceAt(frac);\n' +
         '  var yOffset = (priceMax - live) * scale;\n' +
         '  [left + width / 2, top + yOffset];\n' +
         '} catch(err) {\n' +
@@ -483,8 +589,25 @@
         'try {\n' +
         '  var candle = thisComp.layer(name);\n' +
         '  var open = candle.effect("Open")("Slider");\n' +
+        '  var high = candle.effect("High")("Slider");\n' +
+        '  var low = candle.effect("Low")("Slider");\n' +
         '  var close = candle.effect("Close")("Slider");\n' +
-        '  var live = open + (close - open) * frac;\n' +
+        '  var segHigh = 0.28;\n' +
+        '  var segLow = 0.68;\n' +
+        '  if (segHigh <= 0) segHigh = 0.25;\n' +
+        '  if (segLow <= segHigh) segLow = segHigh + 0.2;\n' +
+        '  var upSpan = Math.max(0.0001, segHigh);\n' +
+        '  var downSpan = Math.max(0.0001, segLow - segHigh);\n' +
+        '  var closeSpan = Math.max(0.0001, 1 - segLow);\n' +
+        '  function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }\n' +
+        '  function priceAt(p) {\n' +
+        '    if (p <= 0) return open;\n' +
+        '    if (p < segHigh) return lerp(open, high, p / upSpan);\n' +
+        '    if (p < segLow) return lerp(high, low, (p - segHigh) / downSpan);\n' +
+        '    if (p >= 1) return close;\n' +
+        '    return lerp(low, close, (p - segLow) / closeSpan);\n' +
+        '  }\n' +
+        '  var live = priceAt(frac);\n' +
         '  var target = [left + width + offset, top + (priceMax - live) * scale];\n' +
         '  var rect = thisLayer.sourceRectAtTime(time, false);\n' +
         '  var offsetVec = [rect.left + rect.width / 2, rect.top + rect.height / 2];\n' +
@@ -506,8 +629,25 @@
         'try {\n' +
         '  var candle = thisComp.layer(name);\n' +
         '  var open = candle.effect("Open")("Slider");\n' +
+        '  var high = candle.effect("High")("Slider");\n' +
+        '  var low = candle.effect("Low")("Slider");\n' +
         '  var close = candle.effect("Close")("Slider");\n' +
-        '  var live = open + (close - open) * frac;\n' +
+        '  var segHigh = 0.28;\n' +
+        '  var segLow = 0.68;\n' +
+        '  if (segHigh <= 0) segHigh = 0.25;\n' +
+        '  if (segLow <= segHigh) segLow = segHigh + 0.2;\n' +
+        '  var upSpan = Math.max(0.0001, segHigh);\n' +
+        '  var downSpan = Math.max(0.0001, segLow - segHigh);\n' +
+        '  var closeSpan = Math.max(0.0001, 1 - segLow);\n' +
+        '  function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }\n' +
+        '  function priceAt(p) {\n' +
+        '    if (p <= 0) return open;\n' +
+        '    if (p < segHigh) return lerp(open, high, p / upSpan);\n' +
+        '    if (p < segLow) return lerp(high, low, (p - segHigh) / downSpan);\n' +
+        '    if (p >= 1) return close;\n' +
+        '    return lerp(low, close, (p - segLow) / closeSpan);\n' +
+        '  }\n' +
+        '  var live = priceAt(frac);\n' +
         '  var formatted = Number(live).toFixed(2);\n' +
         '  doc.text = "$" + formatted;\n' +
         '} catch(err) {\n' +
@@ -573,12 +713,33 @@
         'var index = Math.floor(Math.min(cursor, total - 1));\n' +
         'var nextFrac = clamp(cursor - index, 0, 1);\n' +
         'var name = "Candle_" + ("00" + (index + 1)).slice(-3);\n' +
-        'var candle = thisComp.layer(name);\n' +
-        'var open = candle.effect("Open")("Slider");\n' +
-        'var close = candle.effect("Close")("Slider");\n' +
-        'var interim = open + (close - open) * nextFrac;\n' +
-        'var rounded = Math.round(interim * 100) / 100;\n' +
-        '"Live Price: " + rounded;';
+        'try {\n' +
+        '  var candle = thisComp.layer(name);\n' +
+        '  var open = candle.effect("Open")("Slider");\n' +
+        '  var high = candle.effect("High")("Slider");\n' +
+        '  var low = candle.effect("Low")("Slider");\n' +
+        '  var close = candle.effect("Close")("Slider");\n' +
+        '  var segHigh = 0.28;\n' +
+        '  var segLow = 0.68;\n' +
+        '  if (segHigh <= 0) segHigh = 0.25;\n' +
+        '  if (segLow <= segHigh) segLow = segHigh + 0.2;\n' +
+        '  var upSpan = Math.max(0.0001, segHigh);\n' +
+        '  var downSpan = Math.max(0.0001, segLow - segHigh);\n' +
+        '  var closeSpan = Math.max(0.0001, 1 - segLow);\n' +
+        '  function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }\n' +
+        '  function priceAt(p) {\n' +
+        '    if (p <= 0) return open;\n' +
+        '    if (p < segHigh) return lerp(open, high, p / upSpan);\n' +
+        '    if (p < segLow) return lerp(high, low, (p - segHigh) / downSpan);\n' +
+        '    if (p >= 1) return close;\n' +
+        '    return lerp(low, close, (p - segLow) / closeSpan);\n' +
+        '  }\n' +
+        '  var live = priceAt(nextFrac);\n' +
+        '  var formatted = Number(live).toFixed(2);\n' +
+        '  "Live Price: " + formatted;\n' +
+        '} catch(err) {\n' +
+        '  "Live Price: --";\n' +
+        '}';
 
     app.endUndoGroup();
 })();
