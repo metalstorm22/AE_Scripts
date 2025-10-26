@@ -64,6 +64,54 @@
         return effect;
     }
 
+    function createHorizontalLine(parentGroup, ratio, thickness, colorArray, name) {
+        var lineGroup = parentGroup.addProperty("ADBE Vector Group");
+        lineGroup.name = name;
+        var vectors = lineGroup.property("ADBE Vectors Group");
+        var rectShape = vectors.addProperty("ADBE Vector Shape - Rect");
+        rectShape.property("ADBE Vector Rect Roundness").setValue(0);
+        rectShape.property("ADBE Vector Rect Size").expression =
+            'var controls = thisComp.layer("Chart Controls");\n' +
+            'var width = controls.effect("Chart Width")("Slider");\n' +
+            '[' +
+            'width, ' + thickness + '];';
+        var fill = vectors.addProperty("ADBE Vector Graphic - Fill");
+        fill.property("ADBE Vector Fill Color").setValue(colorArray);
+        var transform = lineGroup.property("ADBE Vector Transform Group");
+        transform.property("ADBE Vector Position").expression =
+            'var controls = thisComp.layer("Chart Controls");\n' +
+            'var left = controls.effect("Chart Left")("Slider");\n' +
+            'var width = controls.effect("Chart Width")("Slider");\n' +
+            'var top = controls.effect("Chart Top")("Slider");\n' +
+            'var height = controls.effect("Chart Height")("Slider");\n' +
+            'var y = top + height * ' + ratio + ';\n' +
+            '[left + width / 2, y];';
+    }
+
+    function createVerticalLine(parentGroup, ratio, thickness, colorArray, name) {
+        var lineGroup = parentGroup.addProperty("ADBE Vector Group");
+        lineGroup.name = name;
+        var vectors = lineGroup.property("ADBE Vectors Group");
+        var rectShape = vectors.addProperty("ADBE Vector Shape - Rect");
+        rectShape.property("ADBE Vector Rect Roundness").setValue(0);
+        rectShape.property("ADBE Vector Rect Size").expression =
+            'var controls = thisComp.layer("Chart Controls");\n' +
+            'var height = controls.effect("Chart Height")("Slider");\n' +
+            '[' +
+            thickness + ', height];';
+        var fill = vectors.addProperty("ADBE Vector Graphic - Fill");
+        fill.property("ADBE Vector Fill Color").setValue(colorArray);
+        var transform = lineGroup.property("ADBE Vector Transform Group");
+        transform.property("ADBE Vector Position").expression =
+            'var controls = thisComp.layer("Chart Controls");\n' +
+            'var left = controls.effect("Chart Left")("Slider");\n' +
+            'var width = controls.effect("Chart Width")("Slider");\n' +
+            'var top = controls.effect("Chart Top")("Slider");\n' +
+            'var height = controls.effect("Chart Height")("Slider");\n' +
+            'var x = left + width * ' + ratio + ';\n' +
+            '[x, top + height / 2];';
+    }
+
     /**
      * Generate synthetic OHLC data
      */
@@ -125,39 +173,63 @@
 
     var gridLayer = comp.layers.addShape();
     gridLayer.name = "Grid Overlay";
+    gridLayer.property("Transform").property("Anchor Point").setValue([0, 0]);
+    gridLayer.property("Transform").property("Position").setValue([0, 0]);
+    gridLayer.property("Transform").property("Scale").setValue([100, 100]);
+
     var gridContents = gridLayer.property("ADBE Root Vectors Group");
-    var gridGroup = gridContents.addProperty("ADBE Vector Group");
-    gridGroup.name = "Grid";
-    var gridRect = gridGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Shape - Rect");
-    gridRect.property("ADBE Vector Rect Size").setValue([chartWidth, chartHeight]);
-    gridRect.property("ADBE Vector Rect Position").setValue([0, 0]);
-    var gridStroke = gridGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Graphic - Stroke");
-    gridStroke.property("ADBE Vector Stroke Color").setValue([0.2, 0.26, 0.35, 1]);
-    gridStroke.property("ADBE Vector Stroke Width").setValue(2);
-    var gridTransform = gridGroup.property("ADBE Vector Transform Group");
-    gridTransform.property("ADBE Vector Position").setValue([chartLeft + chartWidth / 2, chartTop + chartHeight / 2]);
 
-    // horizontal guides
-    var gridLinesGroup = gridContents.addProperty("ADBE Vector Group");
-    gridLinesGroup.name = "Guides";
-    var gridLines = gridLinesGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Shape - Rect");
-    gridLines.property("ADBE Vector Rect Size").setValue([chartWidth, 1]);
-    gridLines.property("ADBE Vector Rect Position").setValue([0, 0]);
-    var guideStroke = gridLinesGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Graphic - Fill");
-    guideStroke.property("ADBE Vector Fill Color").setValue([0.15, 0.18, 0.24, 1]);
-    var guideTransform = gridLinesGroup.property("ADBE Vector Transform Group");
-    guideTransform.property("ADBE Vector Position").setValue([chartLeft + chartWidth / 2, chartTop + chartHeight / 2]);
-    guideTransform.property("ADBE Vector Scale").setValue([100, 100]);
+    var gridBackgroundGroup = gridContents.addProperty("ADBE Vector Group");
+    gridBackgroundGroup.name = "Chart Background";
+    var gridBackgroundVectors = gridBackgroundGroup.property("ADBE Vectors Group");
+    var gridBackgroundRect = gridBackgroundVectors.addProperty("ADBE Vector Shape - Rect");
+    gridBackgroundRect.property("ADBE Vector Rect Roundness").setValue(0);
+    gridBackgroundRect.property("ADBE Vector Rect Size").expression =
+        'var controls = thisComp.layer("Chart Controls");\n' +
+        'var width = controls.effect("Chart Width")("Slider");\n' +
+        'var height = controls.effect("Chart Height")("Slider");\n' +
+        '[width, height];';
+    var gridBackgroundFill = gridBackgroundVectors.addProperty("ADBE Vector Graphic - Fill");
+    gridBackgroundFill.property("ADBE Vector Fill Color").setValue([0.07, 0.09, 0.13, 0.85]);
+    var gridBackgroundStroke = gridBackgroundVectors.addProperty("ADBE Vector Graphic - Stroke");
+    gridBackgroundStroke.property("ADBE Vector Stroke Color").setValue([0.22, 0.32, 0.42, 1]);
+    gridBackgroundStroke.property("ADBE Vector Stroke Width").setValue(2);
+    var gridBackgroundTransform = gridBackgroundGroup.property("ADBE Vector Transform Group");
+    gridBackgroundTransform.property("ADBE Vector Position").expression =
+        'var controls = thisComp.layer("Chart Controls");\n' +
+        'var left = controls.effect("Chart Left")("Slider");\n' +
+        'var width = controls.effect("Chart Width")("Slider");\n' +
+        'var top = controls.effect("Chart Top")("Slider");\n' +
+        'var height = controls.effect("Chart Height")("Slider");\n' +
+        '[left + width / 2, top + height / 2];';
 
-    // duplicate guide stripes
-    var guideRepeater = gridLinesGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Filter - Repeater");
-    if (guideRepeater) {
-        guideRepeater.property("ADBE Vector Repeater Copies").setValue(5);
-        var repeaterTransform = guideRepeater.property("ADBE Vector Repeater Transform");
-        if (repeaterTransform) {
-            var repeaterPosition = repeaterTransform.property("ADBE Vector Position");
-            if (repeaterPosition) {
-                repeaterPosition.setValue([0, chartHeight / 5]);
+    var majorColor = [0.22, 0.28, 0.36, 0.9];
+    var minorColor = [0.13, 0.17, 0.24, 0.6];
+
+    var horizontalMajorCount = 6;
+    var horizontalMinorDivisions = 4;
+    for (var h = 0; h < horizontalMajorCount; h += 1) {
+        var majorRatio = (horizontalMajorCount === 1) ? 0 : h / (horizontalMajorCount - 1);
+        createHorizontalLine(gridContents, majorRatio, 3, majorColor, "H Major " + pad(h + 1, 2));
+        if (h < horizontalMajorCount - 1) {
+            var nextRatio = (horizontalMajorCount === 1) ? 1 : (h + 1) / (horizontalMajorCount - 1);
+            for (var hm = 1; hm < horizontalMinorDivisions; hm += 1) {
+                var minorRatio = majorRatio + (nextRatio - majorRatio) * (hm / horizontalMinorDivisions);
+                createHorizontalLine(gridContents, minorRatio, 1, minorColor, "H Minor " + pad(h, 2) + "_" + hm);
+            }
+        }
+    }
+
+    var verticalMajorCount = 10;
+    var verticalMinorDivisions = 3;
+    for (var v = 0; v < verticalMajorCount; v += 1) {
+        var vMajorRatio = (verticalMajorCount === 1) ? 0 : v / (verticalMajorCount - 1);
+        createVerticalLine(gridContents, vMajorRatio, 3, majorColor, "V Major " + pad(v + 1, 2));
+        if (v < verticalMajorCount - 1) {
+            var vNextRatio = (verticalMajorCount === 1) ? 1 : (v + 1) / (verticalMajorCount - 1);
+            for (var vm = 1; vm < verticalMinorDivisions; vm += 1) {
+                var vMinorRatio = vMajorRatio + (vNextRatio - vMajorRatio) * (vm / verticalMinorDivisions);
+                createVerticalLine(gridContents, vMinorRatio, 1, minorColor, "V Minor " + pad(v, 2) + "_" + vm);
             }
         }
     }
@@ -425,6 +497,7 @@
         'var doc = value;\n' +
         'var color = controls.effect("Follower Text Color")("Color");\n' +
         'doc.fillColor = [color[0], color[1], color[2]];\n' +
+        'doc.applyFill = true;\n' +
         'var total = Math.max(1, controls.effect("Total Candles")("Slider"));\n' +
         'var cursor = clamp(controls.effect("Current Second")("Slider"), 0, total - 0.001);\n' +
         'var idx = Math.floor(cursor);\n' +
@@ -435,11 +508,10 @@
         '  var open = candle.effect("Open")("Slider");\n' +
         '  var close = candle.effect("Close")("Slider");\n' +
         '  var live = open + (close - open) * frac;\n' +
-        '  var rounded = Math.round(live * 100) / 100;\n' +
-        '  var formatted = rounded.toFixed ? rounded.toFixed(2) : rounded;\n' +
-        '  doc.text = formatted;\n' +
+        '  var formatted = Number(live).toFixed(2);\n' +
+        '  doc.text = "$" + formatted;\n' +
         '} catch(err) {\n' +
-        '  doc.text = "--";\n' +
+        '  doc.text = "$--";\n' +
         '}\n' +
         'doc;';
 
@@ -472,7 +544,7 @@
     var followerLabelFill = followerLabelGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Graphic - Fill");
     followerLabelFill.property("ADBE Vector Fill Color").expression =
         'thisComp.layer("Chart Controls").effect("Follower Color")("Color");';
-    followerLabelBG.moveBefore(followerLabel);
+    followerLabelBG.moveAfter(followerLabel);
 
     /**
      * Live price readout
@@ -481,7 +553,12 @@
     priceText.name = "Live Price";
     priceText.inPoint = 0;
     priceText.outPoint = COMP_DURATION;
-    priceText.property("Position").setValue([chartRight, chartTop - 40]);
+    priceText.property("Position").expression =
+        'var controls = thisComp.layer("Chart Controls");\n' +
+        'var left = controls.effect("Chart Left")("Slider");\n' +
+        'var width = controls.effect("Chart Width")("Slider");\n' +
+        'var top = controls.effect("Chart Top")("Slider");\n' +
+        '[left + width, top - 40];';
     var textDoc = priceText.property("Source Text").value;
     textDoc.fontSize = 42;
     textDoc.fillColor = [0.85, 0.92, 0.96];
