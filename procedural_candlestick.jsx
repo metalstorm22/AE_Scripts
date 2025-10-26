@@ -178,6 +178,7 @@
     addSlider(controls, "Manual Cursor", 0);
     addSlider(controls, "Chart Top", chartTop);
     addSlider(controls, "Chart Height", chartHeight);
+    addSlider(controls, "Chart Width", chartWidth);
     addSlider(controls, "Chart Left", chartLeft);
     addSlider(controls, "Candle Width", candleWidth);
     addSlider(controls, "Candle Gap", candleGap);
@@ -187,6 +188,12 @@
     addColorControl(controls, "Bull Color", [0.1, 0.7, 0.35, 1]);
     addColorControl(controls, "Bear Color", [0.85, 0.2, 0.28, 1]);
     addColorControl(controls, "Wick Color", [0.9, 0.9, 0.95, 1]);
+    addCheckbox(controls, "Show Follower", true);
+    addSlider(controls, "Follower Thickness", 4);
+    addSlider(controls, "Follower Label Offset", 28);
+    addSlider(controls, "Follower Box Padding", 14);
+    addColorControl(controls, "Follower Color", [0.85, 0.1, 0.12, 1]);
+    addColorControl(controls, "Follower Text Color", [1, 1, 1, 1]);
 
     var currentSecondSlider = addSlider(controls, "Current Second", 0);
     currentSecondSlider.property("ADBE Slider Control-0001").expression =
@@ -327,6 +334,145 @@
             'var bear = controls.effect("Bear Color")("Color");\n' +
             '(liveClose >= open) ? bull : bear;';
     }
+
+    /**
+     * Follower line and label
+     */
+    var followerLine = comp.layers.addShape();
+    followerLine.name = "Follower Line";
+    followerLine.inPoint = 0;
+    followerLine.outPoint = COMP_DURATION;
+    followerLine.property("Transform").property("Anchor Point").setValue([0, 0]);
+    followerLine.property("Transform").property("Opacity").expression =
+        'thisComp.layer("Chart Controls").effect("Show Follower")("Checkbox") > 0 ? 100 : 0;';
+    followerLine.property("Transform").property("Position").expression =
+        'var controls = thisComp.layer("Chart Controls");\n' +
+        'var left = controls.effect("Chart Left")("Slider");\n' +
+        'var width = controls.effect("Chart Width")("Slider");\n' +
+        'var top = controls.effect("Chart Top")("Slider");\n' +
+        'var priceMax = controls.effect("Price Max")("Slider");\n' +
+        'var scale = controls.effect("Price Scale")("Slider");\n' +
+        'var total = Math.max(1, controls.effect("Total Candles")("Slider"));\n' +
+        'var cursor = clamp(controls.effect("Current Second")("Slider"), 0, total - 0.001);\n' +
+        'var idx = Math.floor(cursor);\n' +
+        'var frac = cursor - idx;\n' +
+        'var name = "Candle_" + ("00" + (idx + 1)).slice(-3);\n' +
+        'try {\n' +
+        '  var candle = thisComp.layer(name);\n' +
+        '  var open = candle.effect("Open")("Slider");\n' +
+        '  var close = candle.effect("Close")("Slider");\n' +
+        '  var live = open + (close - open) * frac;\n' +
+        '  var yOffset = (priceMax - live) * scale;\n' +
+        '  [left + width / 2, top + yOffset];\n' +
+        '} catch(err) {\n' +
+        '  value;\n' +
+        '}';
+    var followerContents = followerLine.property("ADBE Root Vectors Group");
+    var followerGroup = followerContents.addProperty("ADBE Vector Group");
+    followerGroup.name = "Follower";
+    var followerRect = followerGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Shape - Rect");
+    followerRect.property("ADBE Vector Rect Roundness").setValue(0);
+    followerRect.property("ADBE Vector Rect Position").setValue([0, 0]);
+    followerRect.property("ADBE Vector Rect Size").expression =
+        'var controls = thisComp.layer("Chart Controls");\n' +
+        'var width = controls.effect("Chart Width")("Slider");\n' +
+        'var thickness = Math.max(1, controls.effect("Follower Thickness")("Slider"));\n' +
+        '[width, thickness];';
+    var followerFill = followerGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Graphic - Fill");
+    followerFill.property("ADBE Vector Fill Color").expression =
+        'thisComp.layer("Chart Controls").effect("Follower Color")("Color");';
+
+    var followerLabel = comp.layers.addText("Follower Price");
+    followerLabel.name = "Follower Price Text";
+    followerLabel.inPoint = 0;
+    followerLabel.outPoint = COMP_DURATION;
+    var followerDoc = followerLabel.property("Source Text").value;
+    followerDoc.fontSize = 30;
+    followerDoc.fillColor = [1, 1, 1];
+    if (typeof ParagraphJustification !== "undefined") {
+        followerDoc.justification = ParagraphJustification.CENTER_JUSTIFY;
+    }
+    followerLabel.property("Source Text").setValue(followerDoc);
+    followerLabel.property("Transform").property("Opacity").expression =
+        'thisComp.layer("Chart Controls").effect("Show Follower")("Checkbox") > 0 ? 100 : 0;';
+    followerLabel.property("Transform").property("Position").expression =
+        'var controls = thisComp.layer("Chart Controls");\n' +
+        'var left = controls.effect("Chart Left")("Slider");\n' +
+        'var width = controls.effect("Chart Width")("Slider");\n' +
+        'var offset = controls.effect("Follower Label Offset")("Slider");\n' +
+        'var top = controls.effect("Chart Top")("Slider");\n' +
+        'var priceMax = controls.effect("Price Max")("Slider");\n' +
+        'var scale = controls.effect("Price Scale")("Slider");\n' +
+        'var total = Math.max(1, controls.effect("Total Candles")("Slider"));\n' +
+        'var cursor = clamp(controls.effect("Current Second")("Slider"), 0, total - 0.001);\n' +
+        'var idx = Math.floor(cursor);\n' +
+        'var frac = cursor - idx;\n' +
+        'var name = "Candle_" + ("00" + (idx + 1)).slice(-3);\n' +
+        'try {\n' +
+        '  var candle = thisComp.layer(name);\n' +
+        '  var open = candle.effect("Open")("Slider");\n' +
+        '  var close = candle.effect("Close")("Slider");\n' +
+        '  var live = open + (close - open) * frac;\n' +
+        '  var target = [left + width + offset, top + (priceMax - live) * scale];\n' +
+        '  var rect = thisLayer.sourceRectAtTime(time, false);\n' +
+        '  var offsetVec = [rect.left + rect.width / 2, rect.top + rect.height / 2];\n' +
+        '  target - offsetVec;\n' +
+        '} catch(err) {\n' +
+        '  value;\n' +
+        '}';
+    followerLabel.property("Source Text").expression =
+        'var controls = thisComp.layer("Chart Controls");\n' +
+        'var doc = value;\n' +
+        'var color = controls.effect("Follower Text Color")("Color");\n' +
+        'doc.fillColor = [color[0], color[1], color[2]];\n' +
+        'var total = Math.max(1, controls.effect("Total Candles")("Slider"));\n' +
+        'var cursor = clamp(controls.effect("Current Second")("Slider"), 0, total - 0.001);\n' +
+        'var idx = Math.floor(cursor);\n' +
+        'var frac = cursor - idx;\n' +
+        'var name = "Candle_" + ("00" + (idx + 1)).slice(-3);\n' +
+        'try {\n' +
+        '  var candle = thisComp.layer(name);\n' +
+        '  var open = candle.effect("Open")("Slider");\n' +
+        '  var close = candle.effect("Close")("Slider");\n' +
+        '  var live = open + (close - open) * frac;\n' +
+        '  var rounded = Math.round(live * 100) / 100;\n' +
+        '  var formatted = rounded.toFixed ? rounded.toFixed(2) : rounded;\n' +
+        '  doc.text = formatted;\n' +
+        '} catch(err) {\n' +
+        '  doc.text = "--";\n' +
+        '}\n' +
+        'doc;';
+
+    var followerLabelBG = comp.layers.addShape();
+    followerLabelBG.name = "Follower Price Background";
+    followerLabelBG.inPoint = 0;
+    followerLabelBG.outPoint = COMP_DURATION;
+    followerLabelBG.property("Transform").property("Anchor Point").setValue([0, 0]);
+    followerLabelBG.property("Transform").property("Opacity").expression =
+        'thisComp.layer("Chart Controls").effect("Show Follower")("Checkbox") > 0 ? 100 : 0;';
+    followerLabelBG.property("Transform").property("Position").expression =
+        'var textLayer = thisComp.layer("Follower Price Text");\n' +
+        'var rect = textLayer.sourceRectAtTime(time, false);\n' +
+        'var pos = textLayer.transform.position;\n' +
+        'pos + [rect.left + rect.width / 2, rect.top + rect.height / 2];';
+    var followerLabelContents = followerLabelBG.property("ADBE Root Vectors Group");
+    var followerLabelGroup = followerLabelContents.addProperty("ADBE Vector Group");
+    followerLabelGroup.name = "Background";
+    var followerLabelRect = followerLabelGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Shape - Rect");
+    followerLabelRect.property("ADBE Vector Rect Roundness").setValue(6);
+    followerLabelRect.property("ADBE Vector Rect Position").setValue([0, 0]);
+    followerLabelRect.property("ADBE Vector Rect Size").expression =
+        'var controls = thisComp.layer("Chart Controls");\n' +
+        'var textLayer = thisComp.layer("Follower Price Text");\n' +
+        'var padding = controls.effect("Follower Box Padding")("Slider");\n' +
+        'var rect = textLayer.sourceRectAtTime(time, false);\n' +
+        'var width = rect.width + padding * 2;\n' +
+        'var height = rect.height + padding * 2;\n' +
+        '[Math.max(width, 10), Math.max(height, 10)];';
+    var followerLabelFill = followerLabelGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Graphic - Fill");
+    followerLabelFill.property("ADBE Vector Fill Color").expression =
+        'thisComp.layer("Chart Controls").effect("Follower Color")("Color");';
+    followerLabelBG.moveBefore(followerLabel);
 
     /**
      * Live price readout
