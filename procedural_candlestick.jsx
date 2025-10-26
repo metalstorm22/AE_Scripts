@@ -287,7 +287,7 @@
         var bodyGroupLayer = candleContents.addProperty("ADBE Vector Group");
         bodyGroupLayer.name = "Body";
         var bodyShape = bodyGroupLayer.property("ADBE Vectors Group").addProperty("ADBE Vector Shape - Rect");
-        bodyShape.property("ADBE Vector Rect Roundness").setValue(6);
+        bodyShape.property("ADBE Vector Rect Roundness").setValue(0);
         bodyShape.property("ADBE Vector Rect Position").expression =
             'var controls = thisComp.layer("Chart Controls");\n' +
             'var idx = thisLayer.effect("Candle Index")("Slider");\n' +
