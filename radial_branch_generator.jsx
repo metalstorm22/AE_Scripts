@@ -58,6 +58,91 @@
             return cb;
         }
 
+        function clamp01(value) {
+            return Math.max(0, Math.min(1, value));
+        }
+
+        function formatColor(color) {
+            var cols = color.slice(0, 4);
+            if (cols.length < 4) {
+                cols.push(1);
+            }
+            for (var i = 0; i < cols.length; i++) {
+                cols[i] = clamp01(cols[i]);
+            }
+            return cols.map(function (c) {
+                return c.toFixed(3);
+            }).join(", ");
+        }
+
+        function parseColor(text, fallback) {
+            var out = fallback.slice ? fallback.slice() : [fallback];
+            var parts = text.split(/[, ]+/);
+            var idx = 0;
+            for (var i = 0; i < parts.length && idx < 4; i++) {
+                var token = parts[i];
+                if (!token.length) {
+                    continue;
+                }
+                var val = parseFloat(token);
+                if (isNaN(val)) {
+                    continue;
+                }
+                if (val > 1.0) {
+                    val = Math.max(0, Math.min(255, val)) / 255;
+                }
+                out[idx] = clamp01(val);
+                idx++;
+            }
+            while (out.length < 4) {
+                out.push(idx === 3 ? 1 : fallback[out.length] || 1);
+            }
+            return out.slice(0, 4);
+        }
+
+        function rgbArrayToHex(color) {
+            var r = Math.round(clamp01(color[0]) * 255);
+            var g = Math.round(clamp01(color[1]) * 255);
+            var b = Math.round(clamp01(color[2]) * 255);
+            return (r << 16) | (g << 8) | b;
+        }
+
+        function hexToRgb(hex) {
+            return [
+                ((hex >> 16) & 0xFF) / 255,
+                ((hex >> 8) & 0xFF) / 255,
+                (hex & 0xFF) / 255
+            ];
+        }
+
+        function addColorRow(parent, label, defaultValue) {
+            var group = parent.add("group");
+            group.orientation = "row";
+            group.alignChildren = ["left", "center"];
+            group.spacing = 6;
+            var st = group.add("statictext", undefined, label);
+            st.preferredSize.width = 150;
+            var et = group.add("edittext", undefined, formatColor(defaultValue));
+            et.characters = 22;
+            var pickBtn = group.add("button", undefined, "Pick");
+            pickBtn.onClick = function () {
+                var current = parseColor(et.text, defaultValue);
+                if (typeof $.colorPicker === "function") {
+                    var picked = $.colorPicker(rgbArrayToHex(current));
+                    if (picked >= 0) {
+                        var rgb = hexToRgb(picked);
+                        current[0] = rgb[0];
+                        current[1] = rgb[1];
+                        current[2] = rgb[2];
+                        et.text = formatColor(current);
+                    }
+                } else {
+                    alert("Color picker unavailable. Enter RGB(A) values manually.");
+                }
+            };
+            return et;
+        }
+
         var settingsPanel = pal.add("panel", undefined, "Structure");
         settingsPanel.orientation = "column";
         settingsPanel.alignChildren = ["fill", "top"];
@@ -105,6 +190,16 @@
         var compFpsEt = compTimingGroup.add("edittext", undefined, DEFAULTS.compFrameRate.toString());
         compFpsEt.characters = 5;
         compTimingGroup.add("statictext", undefined, "fps");
+
+        var colorPanel = pal.add("panel", undefined, "Colors");
+        colorPanel.orientation = "column";
+        colorPanel.alignChildren = ["fill", "top"];
+        colorPanel.spacing = 4;
+        colorPanel.margins = 10;
+
+        var circleFillEt = addColorRow(colorPanel, "Node fill RGBA", DEFAULTS.circleFill);
+        var circleStrokeEt = addColorRow(colorPanel, "Node stroke RGBA", DEFAULTS.circleStroke);
+        var lineColorEt = addColorRow(colorPanel, "Line RGBA", DEFAULTS.lineColor);
 
         var buttonGroup = pal.add("group");
         buttonGroup.orientation = "row";
@@ -162,9 +257,9 @@
                 compHeight: readInt(compHeightEt, DEFAULTS.compHeight, 16),
                 compDuration: readFloat(compDurationEt, DEFAULTS.compDuration, 0.1),
                 compFrameRate: readFloat(compFpsEt, DEFAULTS.compFrameRate, 1),
-                circleFill: DEFAULTS.circleFill,
-                circleStroke: DEFAULTS.circleStroke,
-                lineColor: DEFAULTS.lineColor
+                circleFill: parseColor(circleFillEt.text, DEFAULTS.circleFill),
+                circleStroke: parseColor(circleStrokeEt.text, DEFAULTS.circleStroke),
+                lineColor: parseColor(lineColorEt.text, DEFAULTS.lineColor)
             };
         }
 
