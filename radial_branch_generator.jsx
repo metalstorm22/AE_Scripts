@@ -28,7 +28,12 @@
         circleStroke: [0.835, 0.894, 1, 1],
         lineColor: [0.835, 0.894, 1, 1],
         make3D: false,
-        simultaneousRoot: false
+        simultaneousRoot: false,
+        lineDuration: 0.35,
+        nodeDuration: 0.22,
+        childStagger: 0.05,
+        randomOffset: 0.06,
+        smoothFlow: true
     };
 
     var ANIMATION_DEFAULTS = {
@@ -172,9 +177,14 @@
         var branchSpreadEt = addEditRow(settingsPanel, "Branch spread (deg)", DEFAULTS.branchSpread, 6);
         var circleSizeEt = addEditRow(settingsPanel, "Circle diameter (px)", DEFAULTS.circleSize, 6);
         var lineWidthEt = addEditRow(settingsPanel, "Line width (px)", DEFAULTS.lineWidth, 5);
+        var lineDurationEt = addEditRow(settingsPanel, "Line anim duration (s)", DEFAULTS.lineDuration, 5);
+        var nodeDurationEt = addEditRow(settingsPanel, "Node anim duration (s)", DEFAULTS.nodeDuration, 5);
+        var childStaggerEt = addEditRow(settingsPanel, "Child stagger (s)", DEFAULTS.childStagger, 5);
+        var randomOffsetEt = addEditRow(settingsPanel, "Random offset (s)", DEFAULTS.randomOffset, 5);
         var seedEt = addEditRow(settingsPanel, "Random seed", DEFAULTS.seed, 7);
         var make3DCb = addCheckbox(settingsPanel, "Create 3D layers", DEFAULTS.make3D);
         var simultaneousRootCb = addCheckbox(settingsPanel, "Animate first ring simultaneously", DEFAULTS.simultaneousRoot);
+        var smoothFlowCb = addCheckbox(settingsPanel, "Smooth continuous flow", DEFAULTS.smoothFlow);
 
         var compPanel = pal.add("panel", undefined, "Composition");
         compPanel.orientation = "column";
@@ -265,6 +275,10 @@
                 branchSpread: readFloat(branchSpreadEt, DEFAULTS.branchSpread, 0, 360),
                 circleSize: readFloat(circleSizeEt, DEFAULTS.circleSize, 2),
                 lineWidth: readFloat(lineWidthEt, DEFAULTS.lineWidth, 0.5),
+                lineDuration: readFloat(lineDurationEt, DEFAULTS.lineDuration, 0.05),
+                nodeDuration: readFloat(nodeDurationEt, DEFAULTS.nodeDuration, 0.05),
+                childStagger: readFloat(childStaggerEt, DEFAULTS.childStagger, 0),
+                randomOffset: Math.max(0, readFloat(randomOffsetEt, DEFAULTS.randomOffset, 0)),
                 seed: readInt(seedEt, DEFAULTS.seed, -2147483647, 2147483646),
                 useActiveComp: useActiveCompCb.value,
                 compName: compNameEt.text.length ? compNameEt.text : DEFAULTS.compName,
@@ -276,7 +290,8 @@
                 circleStroke: parseColor(circleStrokeEt.text, DEFAULTS.circleStroke),
                 lineColor: parseColor(lineColorEt.text, DEFAULTS.lineColor),
                 make3D: make3DCb.value,
-                simultaneousRoot: simultaneousRootCb.value
+                simultaneousRoot: simultaneousRootCb.value,
+                smoothFlow: smoothFlowCb.value
             };
         }
 
@@ -666,10 +681,13 @@
         if (!rootNode) {
             return;
         }
-        var lineDuration = animationOpts && animationOpts.lineDuration !== undefined ? animationOpts.lineDuration : ANIMATION_DEFAULTS.lineDuration;
-        var nodeDuration = animationOpts && animationOpts.nodeDuration !== undefined ? animationOpts.nodeDuration : ANIMATION_DEFAULTS.nodeDuration;
-        var childStagger = animationOpts && animationOpts.childStagger !== undefined ? animationOpts.childStagger : ANIMATION_DEFAULTS.childStagger;
+        var lineDuration = opts && opts.lineDuration !== undefined ? opts.lineDuration : (animationOpts && animationOpts.lineDuration !== undefined ? animationOpts.lineDuration : ANIMATION_DEFAULTS.lineDuration);
+        var nodeDuration = opts && opts.nodeDuration !== undefined ? opts.nodeDuration : (animationOpts && animationOpts.nodeDuration !== undefined ? animationOpts.nodeDuration : ANIMATION_DEFAULTS.nodeDuration);
+        var childStagger = opts && opts.childStagger !== undefined ? opts.childStagger : (animationOpts && animationOpts.childStagger !== undefined ? animationOpts.childStagger : ANIMATION_DEFAULTS.childStagger);
+        var randomOffset = opts && opts.randomOffset !== undefined ? opts.randomOffset : 0;
         var simultaneousRoot = opts && opts.simultaneousRoot;
+        var smoothFlow = (opts && opts.smoothFlow !== undefined) ? opts.smoothFlow : true;
+        var rng = createRng(opts && opts.seed ? opts.seed * 17 + 53 : 123987);
 
         rootNode.inTime = 0;
         rootNode.animStart = rootNode.inTime;
@@ -687,6 +705,9 @@
                     continue;
                 }
                 var offset = childStagger * i;
+                if (randomOffset > 0) {
+                    offset += rng.range(-randomOffset, randomOffset);
+                }
                 if (current === rootNode && simultaneousRoot) {
                     offset = 0;
                 }
@@ -698,9 +719,20 @@
                 if (!childNode) {
                     continue;
                 }
-                childNode.inTime = lineEnd;
-                childNode.animStart = childNode.inTime;
-                childNode.animEnd = childNode.animStart + nodeDuration;
+                if (smoothFlow) {
+                    childNode.animStart = lineStart;
+                } else {
+                    childNode.animStart = lineEnd;
+                }
+                childNode.inTime = childNode.animStart;
+                if (smoothFlow) {
+                    childNode.animEnd = childNode.animStart + Math.max(nodeDuration, 0.0001);
+                    if (childNode.animEnd < lineEnd) {
+                        childNode.animEnd = lineEnd;
+                    }
+                } else {
+                    childNode.animEnd = childNode.animStart + nodeDuration;
+                }
                 childNode.outTime = childNode.animEnd;
                 if (childNode.outTime > maxTime) {
                     maxTime = childNode.outTime;
