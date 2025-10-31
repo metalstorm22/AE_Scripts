@@ -29,6 +29,12 @@
         lineColor: [0.835, 0.894, 1, 1]
     };
 
+    var ANIMATION_DEFAULTS = {
+        lineDuration: 0.6,
+        nodeDuration: 0.3,
+        childStagger: 0.08
+    };
+
     function buildUI(thisObj) {
         var pal = (thisObj instanceof Panel) ? thisObj : new Window("palette", SCRIPT_NAME, undefined, {resizeable: true});
         if (!pal) {
@@ -390,14 +396,21 @@
             angle: angle,
             radius: radius,
             nullLayer: nullLayer,
-            circleLayer: null
+            circleLayer: null,
+            parent: null,
+            children: [],
+            incomingLine: null,
+            inTime: 0,
+            outTime: 0
         };
 
         node.circleLayer = addCircleLayer(comp, node, opts);
         return node;
     }
 
-    function addConnectionLine(comp, parentLayer, childLayer, opts, level, idx) {
+    function addConnectionLine(comp, parentNode, childNode, opts, level, idx) {
+        var parentLayer = parentNode.nullLayer;
+        var childLayer = childNode.nullLayer;
         var lineLayer = comp.layers.addShape();
         lineLayer.name = "RB_Line_L" + level + "_" + idx;
         lineLayer.motionBlur = false;
@@ -435,11 +448,119 @@
         stroke.property("ADBE Vector Stroke Color").setValue([opts.lineColor[0], opts.lineColor[1], opts.lineColor[2]]);
         stroke.property("ADBE Vector Stroke Width").setValue(Math.max(0.1, opts.lineWidth));
         stroke.property("ADBE Vector Stroke Opacity").setValue(opts.lineColor[3] * 100);
-        return lineLayer;
+        var trim = groupContents.addProperty("ADBE Vector Filter - Trim");
+        var trimStart = trim.property("ADBE Vector Trim Start");
+        var trimEnd = trim.property("ADBE Vector Trim End");
+        trimStart.setValue(0);
+        trimEnd.setValue(0);
+        trim.property("ADBE Vector Trim Offset").setValue(0);
+
+        var lineInfo = {
+            layer: lineLayer,
+            parentNode: parentNode,
+            childNode: childNode,
+            trimStart: trimStart,
+            trimEnd: trimEnd
+        };
+        parentNode.children.push(lineInfo);
+        childNode.parent = parentNode;
+        childNode.incomingLine = lineInfo;
+        return lineInfo;
     }
 
-    function reorderGeneratedLayers(nodeLevels, lineLayers) {
-        if (!lineLayers || lineLayers.length === 0) {
+    function clearPropertyKeys(prop) {
+        if (!prop || !prop.canVaryOverTime) {
+            return;
+        }
+        while (prop.numKeys > 0) {
+            prop.removeKey(prop.numKeys);
+        }
+    }
+
+    function setLinearInterpolation(prop, keyIndex) {
+        if (!prop || typeof prop.setInterpolationTypeAtKey !== "function") {
+            return;
+        }
+        if (typeof KeyframeInterpolationType !== "undefined") {
+            prop.setInterpolationTypeAtKey(keyIndex, KeyframeInterpolationType.LINEAR);
+        }
+    }
+
+    function animateNodeScale(node, startTime, duration) {
+        if (!node || !node.circleLayer) {
+            return;
+        }
+        var scaleProp = node.circleLayer.transform.scale;
+        if (!scaleProp || !scaleProp.canVaryOverTime) {
+            return;
+        }
+        var endValue = [].concat(scaleProp.value);
+        var zeroValue = [];
+        for (var i = 0; i < endValue.length; i++) {
+            zeroValue.push(0);
+        }
+        clearPropertyKeys(scaleProp);
+        scaleProp.setValue(zeroValue);
+        var startKey = scaleProp.addKey(startTime);
+        scaleProp.setValueAtKey(startKey, zeroValue);
+        var endKey = scaleProp.addKey(startTime + duration);
+        scaleProp.setValueAtKey(endKey, endValue);
+        setLinearInterpolation(scaleProp, startKey);
+        setLinearInterpolation(scaleProp, endKey);
+    }
+
+    function animateLineTrim(lineInfo, startTime, duration) {
+        if (!lineInfo || !lineInfo.trimEnd) {
+            return;
+        }
+        var trimEnd = lineInfo.trimEnd;
+        clearPropertyKeys(trimEnd);
+        trimEnd.setValue(0);
+        var startKey = trimEnd.addKey(startTime);
+        trimEnd.setValueAtKey(startKey, 0);
+        var endKey = trimEnd.addKey(startTime + duration);
+        trimEnd.setValueAtKey(endKey, 100);
+        setLinearInterpolation(trimEnd, startKey);
+        setLinearInterpolation(trimEnd, endKey);
+    }
+
+    function applyBranchAnimation(rootNode, animationOpts) {
+        if (!rootNode) {
+            return;
+        }
+        var lineDuration = animationOpts && animationOpts.lineDuration !== undefined ? animationOpts.lineDuration : ANIMATION_DEFAULTS.lineDuration;
+        var nodeDuration = animationOpts && animationOpts.nodeDuration !== undefined ? animationOpts.nodeDuration : ANIMATION_DEFAULTS.nodeDuration;
+        var childStagger = animationOpts && animationOpts.childStagger !== undefined ? animationOpts.childStagger : ANIMATION_DEFAULTS.childStagger;
+
+        rootNode.inTime = 0;
+        animateNodeScale(rootNode, rootNode.inTime, nodeDuration);
+        rootNode.outTime = rootNode.inTime + nodeDuration;
+
+        var queue = [rootNode];
+        while (queue.length > 0) {
+            var current = queue.shift();
+            var childLines = current.children || [];
+            for (var i = 0; i < childLines.length; i++) {
+                var lineInfo = childLines[i];
+                if (!lineInfo) {
+                    continue;
+                }
+                var lineStart = current.outTime + childStagger * i;
+                animateLineTrim(lineInfo, lineStart, lineDuration);
+                var childNode = lineInfo.childNode;
+                if (!childNode) {
+                    continue;
+                }
+                childNode.inTime = lineStart + lineDuration;
+                animateNodeScale(childNode, childNode.inTime, nodeDuration);
+                childNode.outTime = childNode.inTime + nodeDuration;
+                queue.push(childNode);
+            }
+        }
+    }
+
+    function reorderGeneratedLayers(nodeLevels, lineInfos) {
+        if (!lineInfos || lineInfos.length === 0) {
             return;
         }
 
@@ -458,6 +579,18 @@
         }
 
         if (circleLayers.length === 0) {
+            return;
+        }
+
+        var lineLayers = [];
+        for (var l = 0; l < lineInfos.length; l++) {
+            var info = lineInfos[l];
+            if (info && info.layer) {
+                lineLayers.push(info.layer);
+            }
+        }
+
+        if (lineLayers.length === 0) {
             return;
         }
 
@@ -491,7 +624,7 @@
         var nodes = [];
         var nodeSerial = 0;
         var connectionSerial = 0;
-        var lineLayers = [];
+        var lineInfos = [];
 
         // Center node
         var centerNode = addNode(comp, center, 0, 0, 0, nodeSerial++, opts);
@@ -511,7 +644,8 @@
                     var pos = polarToCartesian(center, radius, angle);
                     var childNode = addNode(comp, pos, angle, radius, level, nodeSerial++, opts);
                     levelNodes.push(childNode);
-                    lineLayers.push(addConnectionLine(comp, centerNode.nullLayer, childNode.nullLayer, opts, level, connectionSerial++));
+                    var lineInfoRoot = addConnectionLine(comp, centerNode, childNode, opts, level, connectionSerial++);
+                    lineInfos.push(lineInfoRoot);
                 }
             } else {
                 for (var p = 0; p < parentNodes.length; p++) {
@@ -526,14 +660,16 @@
                         var posChild = polarToCartesian(center, radiusChild, angleChild);
                         var newNode = addNode(comp, posChild, angleChild, radiusChild, level, nodeSerial++, opts);
                         levelNodes.push(newNode);
-                        lineLayers.push(addConnectionLine(comp, parentNode.nullLayer, newNode.nullLayer, opts, level, connectionSerial++));
+                        var lineInfo = addConnectionLine(comp, parentNode, newNode, opts, level, connectionSerial++);
+                        lineInfos.push(lineInfo);
                     }
                 }
             }
             nodes[level] = levelNodes;
         }
 
-        reorderGeneratedLayers(nodes, lineLayers);
+        reorderGeneratedLayers(nodes, lineInfos);
+        applyBranchAnimation(centerNode, ANIMATION_DEFAULTS);
     }
 
     var palette = buildUI(thisObj);
