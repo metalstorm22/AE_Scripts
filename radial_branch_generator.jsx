@@ -35,6 +35,11 @@
         childStagger: 0.08
     };
 
+    var CONTROL_NAMES = {
+        layer: "RB_Animation_Control",
+        progress: "RB Progress"
+    };
+
     function buildUI(thisObj) {
         var pal = (thisObj instanceof Panel) ? thisObj : new Window("palette", SCRIPT_NAME, undefined, {resizeable: true});
         if (!pal) {
@@ -401,7 +406,9 @@
             children: [],
             incomingLine: null,
             inTime: 0,
-            outTime: 0
+            outTime: 0,
+            animStart: 0,
+            animEnd: 0
         };
 
         node.circleLayer = addCircleLayer(comp, node, opts);
@@ -477,54 +484,162 @@
         }
     }
 
-    function setLinearInterpolation(prop, keyIndex) {
-        if (!prop || typeof prop.setInterpolationTypeAtKey !== "function") {
-            return;
+    function formatArrayLiteral(values) {
+        var parts = [];
+        for (var i = 0; i < values.length; i++) {
+            parts.push(values[i]);
         }
-        if (typeof KeyframeInterpolationType !== "undefined") {
-            prop.setInterpolationTypeAtKey(keyIndex, KeyframeInterpolationType.LINEAR);
-        }
+        return "[" + parts.join(", ") + "]";
     }
 
-    function animateNodeScale(node, startTime, duration) {
+    function ensureSliderControl(layer, effectName) {
+        var effects = layer.property("ADBE Effect Parade");
+        if (!effects) {
+            return null;
+        }
+        var effect = null;
+        for (var i = 1; i <= effects.numProperties; i++) {
+            var candidate = effects.property(i);
+            if (candidate && candidate.name === effectName) {
+                effect = candidate;
+                break;
+            }
+        }
+        if (!effect) {
+            effect = effects.addProperty("ADBE Slider Control");
+            effect.name = effectName;
+        }
+        return effect ? effect.property("ADBE Slider Control-0001") : null;
+    }
+
+    function ensureAnimationController(comp, totalDuration) {
+        var controller = null;
+        for (var i = 1; i <= comp.layers.length; i++) {
+            var candidate = comp.layers[i];
+            if (candidate && candidate.name === CONTROL_NAMES.layer) {
+                controller = candidate;
+                break;
+            }
+        }
+        if (!controller) {
+            controller = comp.layers.addNull();
+            controller.name = CONTROL_NAMES.layer;
+            controller.label = 2;
+            controller.threeDLayer = false;
+            controller.motionBlur = false;
+            controller.shy = false;
+            controller.transform.position.setValue([comp.width / 2, comp.height / 2]);
+            controller.moveToBeginning();
+        }
+
+        var sliderProp = ensureSliderControl(controller, CONTROL_NAMES.progress);
+        if (sliderProp) {
+            clearPropertyKeys(sliderProp);
+            var startTime = comp.displayStartTime || 0;
+            sliderProp.setValueAtTime(startTime, 0);
+            sliderProp.setValueAtTime(startTime + totalDuration, 100);
+        }
+
+        return controller;
+    }
+
+    function setLineAnimationExpression(lineInfo, totalDuration) {
+        if (!lineInfo || !lineInfo.layer || !lineInfo.trimEnd) {
+            return;
+        }
+        lineInfo.trimStart.setValue(0);
+        clearPropertyKeys(lineInfo.trimEnd);
+        lineInfo.trimEnd.setValue(0);
+        var startProgress = totalDuration > 0 ? (lineInfo.startTime / totalDuration) * 100 : 0;
+        var endProgress = totalDuration > 0 ? (lineInfo.endTime / totalDuration) * 100 : 100;
+        var exprLines = [
+            "var ctrl = null;",
+            "try {",
+            "  ctrl = thisComp.layer(\"" + CONTROL_NAMES.layer + "\");",
+            "} catch (err) {}",
+            "var progress = 100;",
+            "if (ctrl) {",
+            "  try {",
+            "    var progEff = ctrl.effect(\"" + CONTROL_NAMES.progress + "\");",
+            "    if (progEff) {",
+            "      progress = progEff(\"Slider\");",
+            "    }",
+            "  } catch (err) {}",
+            "}",
+            "var startVal = " + startProgress.toFixed(3) + ";",
+            "var endVal = " + endProgress.toFixed(3) + ";",
+            "if (endVal <= startVal) {",
+            "  progress >= endVal ? 100 : 0;",
+            "} else if (progress <= startVal) {",
+            "  0;",
+            "} else if (progress >= endVal) {",
+            "  100;",
+            "} else {",
+            "  linear(progress, startVal, endVal, 0, 100);",
+            "}"
+        ];
+        lineInfo.trimEnd.expression = exprLines.join("\n");
+        lineInfo.trimEnd.expressionEnabled = true;
+    }
+
+    function setNodeAnimationExpression(node, totalDuration) {
         if (!node || !node.circleLayer) {
             return;
         }
-        var scaleProp = node.circleLayer.transform.scale;
-        if (!scaleProp || !scaleProp.canVaryOverTime) {
+        var startProgress = totalDuration > 0 ? (node.animStart / totalDuration) * 100 : 0;
+        var endProgress = totalDuration > 0 ? (node.animEnd / totalDuration) * 100 : 100;
+        var circleLayer = node.circleLayer;
+        var baseScale = circleLayer.transform.scale.value;
+        if (!baseScale || baseScale.length < 2) {
             return;
         }
-        var endValue = [].concat(scaleProp.value);
-        var zeroValue = [];
-        for (var i = 0; i < endValue.length; i++) {
-            zeroValue.push(0);
+        var finalScaleLiteral = formatArrayLiteral(baseScale);
+        var zeroScale = [];
+        for (var z = 0; z < baseScale.length; z++) {
+            zeroScale.push(0);
         }
+        var zeroScaleLiteral = formatArrayLiteral(zeroScale);
+        var scaledParts = [];
+        for (var sp = 0; sp < baseScale.length; sp++) {
+            scaledParts.push("finalScale[" + sp + "] * t");
+        }
+        var scaledLiteral = "[" + scaledParts.join(", ") + "]";
+        var exprLines = [
+            "var ctrl = null;",
+            "try {",
+            "  ctrl = thisComp.layer(\"" + CONTROL_NAMES.layer + "\");",
+            "} catch (err) {}",
+            "var progress = 100;",
+            "if (ctrl) {",
+            "  try {",
+            "    var progEff = ctrl.effect(\"" + CONTROL_NAMES.progress + "\");",
+            "    if (progEff) {",
+            "      progress = progEff(\"Slider\");",
+            "    }",
+            "  } catch (err) {}",
+            "}",
+            "var startVal = " + startProgress.toFixed(3) + ";",
+            "var endVal = " + endProgress.toFixed(3) + ";",
+            "var finalScale = " + finalScaleLiteral + ";",
+            "var zeroScale = " + zeroScaleLiteral + ";",
+            "if (endVal <= startVal) {",
+            "  (progress >= endVal) ? finalScale : zeroScale;",
+            "} else if (progress <= startVal) {",
+            "  zeroScale;",
+            "} else if (progress >= endVal) {",
+            "  finalScale;",
+            "} else {",
+            "  var t = linear(progress, startVal, endVal, 0, 1);",
+            "  " + scaledLiteral + ";",
+            "}"
+        ];
+        var scaleProp = circleLayer.transform.scale;
         clearPropertyKeys(scaleProp);
-        scaleProp.setValue(zeroValue);
-        var startKey = scaleProp.addKey(startTime);
-        scaleProp.setValueAtKey(startKey, zeroValue);
-        var endKey = scaleProp.addKey(startTime + duration);
-        scaleProp.setValueAtKey(endKey, endValue);
-        setLinearInterpolation(scaleProp, startKey);
-        setLinearInterpolation(scaleProp, endKey);
+        scaleProp.expression = exprLines.join("\n");
+        scaleProp.expressionEnabled = true;
     }
 
-    function animateLineTrim(lineInfo, startTime, duration) {
-        if (!lineInfo || !lineInfo.trimEnd) {
-            return;
-        }
-        var trimEnd = lineInfo.trimEnd;
-        clearPropertyKeys(trimEnd);
-        trimEnd.setValue(0);
-        var startKey = trimEnd.addKey(startTime);
-        trimEnd.setValueAtKey(startKey, 0);
-        var endKey = trimEnd.addKey(startTime + duration);
-        trimEnd.setValueAtKey(endKey, 100);
-        setLinearInterpolation(trimEnd, startKey);
-        setLinearInterpolation(trimEnd, endKey);
-    }
-
-    function applyBranchAnimation(rootNode, animationOpts) {
+    function applyBranchAnimation(comp, rootNode, nodeLevels, lineInfos, animationOpts) {
         if (!rootNode) {
             return;
         }
@@ -533,10 +648,12 @@
         var childStagger = animationOpts && animationOpts.childStagger !== undefined ? animationOpts.childStagger : ANIMATION_DEFAULTS.childStagger;
 
         rootNode.inTime = 0;
-        animateNodeScale(rootNode, rootNode.inTime, nodeDuration);
-        rootNode.outTime = rootNode.inTime + nodeDuration;
-
+        rootNode.animStart = rootNode.inTime;
+        rootNode.animEnd = rootNode.animStart + nodeDuration;
+        rootNode.outTime = rootNode.animEnd;
         var queue = [rootNode];
+        var maxTime = rootNode.outTime;
+
         while (queue.length > 0) {
             var current = queue.shift();
             var childLines = current.children || [];
@@ -546,15 +663,44 @@
                     continue;
                 }
                 var lineStart = current.outTime + childStagger * i;
-                animateLineTrim(lineInfo, lineStart, lineDuration);
+                var lineEnd = lineStart + lineDuration;
+                lineInfo.startTime = lineStart;
+                lineInfo.endTime = lineEnd;
                 var childNode = lineInfo.childNode;
                 if (!childNode) {
                     continue;
                 }
-                childNode.inTime = lineStart + lineDuration;
-                animateNodeScale(childNode, childNode.inTime, nodeDuration);
-                childNode.outTime = childNode.inTime + nodeDuration;
+                childNode.inTime = lineEnd;
+                childNode.animStart = childNode.inTime;
+                childNode.animEnd = childNode.animStart + nodeDuration;
+                childNode.outTime = childNode.animEnd;
+                if (childNode.outTime > maxTime) {
+                    maxTime = childNode.outTime;
+                }
                 queue.push(childNode);
+            }
+        }
+
+        if (maxTime <= 0) {
+            maxTime = nodeDuration > 0 ? nodeDuration : 1;
+        }
+
+        var controllerLayer = ensureAnimationController(comp, maxTime);
+        if (!controllerLayer) {
+            return;
+        }
+
+        for (var li = 0; li < lineInfos.length; li++) {
+            setLineAnimationExpression(lineInfos[li], maxTime);
+        }
+
+        for (var levelIdx = 0; levelIdx < nodeLevels.length; levelIdx++) {
+            var levelNodes = nodeLevels[levelIdx];
+            if (!levelNodes) {
+                continue;
+            }
+            for (var nodeIdx = 0; nodeIdx < levelNodes.length; nodeIdx++) {
+                setNodeAnimationExpression(levelNodes[nodeIdx], maxTime);
             }
         }
     }
@@ -669,7 +815,7 @@
         }
 
         reorderGeneratedLayers(nodes, lineInfos);
-        applyBranchAnimation(centerNode, ANIMATION_DEFAULTS);
+        applyBranchAnimation(comp, centerNode, nodes, lineInfos, ANIMATION_DEFAULTS);
     }
 
     var palette = buildUI(thisObj);
