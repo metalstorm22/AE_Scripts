@@ -435,7 +435,54 @@
         stroke.property("ADBE Vector Stroke Color").setValue([opts.lineColor[0], opts.lineColor[1], opts.lineColor[2]]);
         stroke.property("ADBE Vector Stroke Width").setValue(Math.max(0.1, opts.lineWidth));
         stroke.property("ADBE Vector Stroke Opacity").setValue(opts.lineColor[3] * 100);
-        lineLayer.moveToBeginning();
+        return lineLayer;
+    }
+
+    function reorderGeneratedLayers(nodeLevels, lineLayers) {
+        if (!lineLayers || lineLayers.length === 0) {
+            return;
+        }
+
+        var circleLayers = [];
+        for (var levelIdx = 0; levelIdx < nodeLevels.length; levelIdx++) {
+            var levelNodes = nodeLevels[levelIdx];
+            if (!levelNodes) {
+                continue;
+            }
+            for (var nodeIdx = 0; nodeIdx < levelNodes.length; nodeIdx++) {
+                var node = levelNodes[nodeIdx];
+                if (node && node.circleLayer) {
+                    circleLayers.push(node.circleLayer);
+                }
+            }
+        }
+
+        if (circleLayers.length === 0) {
+            return;
+        }
+
+        var bottomCircle = circleLayers[0];
+        for (var c = 1; c < circleLayers.length; c++) {
+            if (circleLayers[c].index > bottomCircle.index) {
+                bottomCircle = circleLayers[c];
+            }
+        }
+
+        lineLayers.sort(function (a, b) {
+            return a.index - b.index;
+        });
+
+        var insertionLayer = bottomCircle;
+        for (var l = 0; l < lineLayers.length; l++) {
+            var lineLayer = lineLayers[l];
+            if (!lineLayer) {
+                continue;
+            }
+            if (lineLayer.index <= insertionLayer.index || lineLayer.index > insertionLayer.index + 1) {
+                lineLayer.moveAfter(insertionLayer);
+            }
+            insertionLayer = lineLayer;
+        }
     }
 
     function generateStructure(comp, opts) {
@@ -444,6 +491,7 @@
         var nodes = [];
         var nodeSerial = 0;
         var connectionSerial = 0;
+        var lineLayers = [];
 
         // Center node
         var centerNode = addNode(comp, center, 0, 0, 0, nodeSerial++, opts);
@@ -463,7 +511,7 @@
                     var pos = polarToCartesian(center, radius, angle);
                     var childNode = addNode(comp, pos, angle, radius, level, nodeSerial++, opts);
                     levelNodes.push(childNode);
-                    addConnectionLine(comp, centerNode.nullLayer, childNode.nullLayer, opts, level, connectionSerial++);
+                    lineLayers.push(addConnectionLine(comp, centerNode.nullLayer, childNode.nullLayer, opts, level, connectionSerial++));
                 }
             } else {
                 for (var p = 0; p < parentNodes.length; p++) {
@@ -478,12 +526,14 @@
                         var posChild = polarToCartesian(center, radiusChild, angleChild);
                         var newNode = addNode(comp, posChild, angleChild, radiusChild, level, nodeSerial++, opts);
                         levelNodes.push(newNode);
-                        addConnectionLine(comp, parentNode.nullLayer, newNode.nullLayer, opts, level, connectionSerial++);
+                        lineLayers.push(addConnectionLine(comp, parentNode.nullLayer, newNode.nullLayer, opts, level, connectionSerial++));
                     }
                 }
             }
             nodes[level] = levelNodes;
         }
+
+        reorderGeneratedLayers(nodes, lineLayers);
     }
 
     var palette = buildUI(thisObj);
