@@ -27,7 +27,8 @@
         circleFill: [0.137, 0.2, 0.345, 1],
         circleStroke: [0.835, 0.894, 1, 1],
         lineColor: [0.835, 0.894, 1, 1],
-        make3D: false
+        make3D: false,
+        simultaneousRoot: false
     };
 
     var ANIMATION_DEFAULTS = {
@@ -173,6 +174,7 @@
         var lineWidthEt = addEditRow(settingsPanel, "Line width (px)", DEFAULTS.lineWidth, 5);
         var seedEt = addEditRow(settingsPanel, "Random seed", DEFAULTS.seed, 7);
         var make3DCb = addCheckbox(settingsPanel, "Create 3D layers", DEFAULTS.make3D);
+        var simultaneousRootCb = addCheckbox(settingsPanel, "Animate first ring simultaneously", DEFAULTS.simultaneousRoot);
 
         var compPanel = pal.add("panel", undefined, "Composition");
         compPanel.orientation = "column";
@@ -273,7 +275,8 @@
                 circleFill: parseColor(circleFillEt.text, DEFAULTS.circleFill),
                 circleStroke: parseColor(circleStrokeEt.text, DEFAULTS.circleStroke),
                 lineColor: parseColor(lineColorEt.text, DEFAULTS.lineColor),
-                make3D: make3DCb.value
+                make3D: make3DCb.value,
+                simultaneousRoot: simultaneousRootCb.value
             };
         }
 
@@ -659,13 +662,14 @@
         scaleProp.expressionEnabled = true;
     }
 
-    function applyBranchAnimation(comp, rootNode, nodeLevels, lineInfos, animationOpts) {
+    function applyBranchAnimation(comp, rootNode, nodeLevels, lineInfos, animationOpts, opts) {
         if (!rootNode) {
             return;
         }
         var lineDuration = animationOpts && animationOpts.lineDuration !== undefined ? animationOpts.lineDuration : ANIMATION_DEFAULTS.lineDuration;
         var nodeDuration = animationOpts && animationOpts.nodeDuration !== undefined ? animationOpts.nodeDuration : ANIMATION_DEFAULTS.nodeDuration;
         var childStagger = animationOpts && animationOpts.childStagger !== undefined ? animationOpts.childStagger : ANIMATION_DEFAULTS.childStagger;
+        var simultaneousRoot = opts && opts.simultaneousRoot;
 
         rootNode.inTime = 0;
         rootNode.animStart = rootNode.inTime;
@@ -682,7 +686,11 @@
                 if (!lineInfo) {
                     continue;
                 }
-                var lineStart = current.outTime + childStagger * i;
+                var offset = childStagger * i;
+                if (current === rootNode && simultaneousRoot) {
+                    offset = 0;
+                }
+                var lineStart = current.outTime + offset;
                 var lineEnd = lineStart + lineDuration;
                 lineInfo.startTime = lineStart;
                 lineInfo.endTime = lineEnd;
@@ -835,7 +843,7 @@
         }
 
         reorderGeneratedLayers(nodes, lineInfos);
-        applyBranchAnimation(comp, centerNode, nodes, lineInfos, ANIMATION_DEFAULTS);
+        applyBranchAnimation(comp, centerNode, nodes, lineInfos, ANIMATION_DEFAULTS, opts);
     }
 
     var palette = buildUI(thisObj);
