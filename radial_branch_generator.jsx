@@ -26,7 +26,8 @@
         compFrameRate: 24,
         circleFill: [0.137, 0.2, 0.345, 1],
         circleStroke: [0.835, 0.894, 1, 1],
-        lineColor: [0.835, 0.894, 1, 1]
+        lineColor: [0.835, 0.894, 1, 1],
+        make3D: false
     };
 
     var ANIMATION_DEFAULTS = {
@@ -171,6 +172,7 @@
         var circleSizeEt = addEditRow(settingsPanel, "Circle diameter (px)", DEFAULTS.circleSize, 6);
         var lineWidthEt = addEditRow(settingsPanel, "Line width (px)", DEFAULTS.lineWidth, 5);
         var seedEt = addEditRow(settingsPanel, "Random seed", DEFAULTS.seed, 7);
+        var make3DCb = addCheckbox(settingsPanel, "Create 3D layers", DEFAULTS.make3D);
 
         var compPanel = pal.add("panel", undefined, "Composition");
         compPanel.orientation = "column";
@@ -270,7 +272,8 @@
                 compFrameRate: readFloat(compFpsEt, DEFAULTS.compFrameRate, 1),
                 circleFill: parseColor(circleFillEt.text, DEFAULTS.circleFill),
                 circleStroke: parseColor(circleStrokeEt.text, DEFAULTS.circleStroke),
-                lineColor: parseColor(lineColorEt.text, DEFAULTS.lineColor)
+                lineColor: parseColor(lineColorEt.text, DEFAULTS.lineColor),
+                make3D: make3DCb.value
             };
         }
 
@@ -362,8 +365,9 @@
         var circleLayer = comp.layers.addShape();
         circleLayer.name = "RB_Circle_L" + node.level + "_" + node.id;
         circleLayer.parent = node.nullLayer;
-        circleLayer.transform.position.setValue([0, 0]);
+        circleLayer.transform.position.setValue(opts.make3D ? [0, 0, 0] : [0, 0]);
         circleLayer.label = 11;
+        circleLayer.threeDLayer = !!opts.make3D;
 
         var contents = circleLayer.property("ADBE Root Vectors Group");
         var group = contents.addProperty("ADBE Vector Group");
@@ -388,10 +392,11 @@
     function addNode(comp, position, angle, radius, level, id, opts) {
         var nullLayer = comp.layers.addNull();
         nullLayer.name = "RB_Node_L" + level + "_" + id;
-        nullLayer.threeDLayer = false;
+        nullLayer.threeDLayer = !!opts.make3D;
         nullLayer.motionBlur = false;
         nullLayer.label = 9;
-        nullLayer.transform.position.setValue(position);
+        var nodePos = opts.make3D ? [position[0], position[1], position.length > 2 ? position[2] : 0] : position.slice(0, 2);
+        nullLayer.transform.position.setValue(nodePos);
         nullLayer.transform.scale.setValue([45, 45, 100]);
         nullLayer.shy = false;
 
@@ -421,8 +426,9 @@
         var lineLayer = comp.layers.addShape();
         lineLayer.name = "RB_Line_L" + level + "_" + idx;
         lineLayer.motionBlur = false;
+        lineLayer.threeDLayer = !!opts.make3D;
         lineLayer.label = 13;
-        lineLayer.transform.position.setValue([0, 0]);
+        lineLayer.transform.position.setValue(opts.make3D ? [0, 0, 0] : [0, 0]);
 
         var effects = lineLayer.property("ADBE Effect Parade");
         var parentEffect = effects.addProperty("ADBE Layer Control");
@@ -444,9 +450,23 @@
             "if (!parentLayer || !childLayer) {",
             "  createPath();",
             "} else {",
-            "  var p = fromComp(parentLayer.toComp(parentLayer.anchorPoint));",
-            "  var c = fromComp(childLayer.toComp(childLayer.anchorPoint));",
-            "  createPath([p, c], [], [], false);",
+            "  var p = parentLayer.toComp(parentLayer.anchorPoint);",
+            "  var c = childLayer.toComp(childLayer.anchorPoint);",
+            "  if (!p || !c) {",
+            "    createPath();",
+            "  } else {",
+            "    if (p.length < 3) {",
+            "      p = [p[0], p[1], 0];",
+            "    }",
+            "    if (c.length < 3) {",
+            "      c = [c[0], c[1], 0];",
+            "    }",
+            "    var pLocal = fromComp(p);",
+            "    var cLocal = fromComp(c);",
+            "    var p2 = (pLocal.length > 2) ? [pLocal[0], pLocal[1]] : pLocal;",
+            "    var c2 = (cLocal.length > 2) ? [cLocal[0], cLocal[1]] : cLocal;",
+            "    createPath([p2, c2], [], [], false);",
+            "  }",
             "}"
         ].join("\n");
         pathProp.expression = expr;
