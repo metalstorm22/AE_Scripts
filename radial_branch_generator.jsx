@@ -33,7 +33,10 @@
         nodeDuration: 0.22,
         childStagger: 0.05,
         randomOffset: 0.06,
-        smoothFlow: true
+        smoothFlow: true,
+        useCurves: false,
+        curveTension: 0.45,
+        curveRandomness: 0.35
     };
 
     var ANIMATION_DEFAULTS = {
@@ -44,7 +47,10 @@
 
     var CONTROL_NAMES = {
         layer: "RB_Animation_Control",
-        progress: "RB Progress"
+        progress: "RB Progress",
+        curvesEnabled: "Organic Curves",
+        curveTension: "Curve Tension",
+        curveRandomness: "Curve Randomness"
     };
 
     function buildUI(thisObj) {
@@ -181,10 +187,13 @@
         var nodeDurationEt = addEditRow(settingsPanel, "Node anim duration (s)", DEFAULTS.nodeDuration, 5);
         var childStaggerEt = addEditRow(settingsPanel, "Child stagger (s)", DEFAULTS.childStagger, 5);
         var randomOffsetEt = addEditRow(settingsPanel, "Random offset (s)", DEFAULTS.randomOffset, 5);
+        var curveTensionEt = addEditRow(settingsPanel, "Curve tension (0-1)", DEFAULTS.curveTension, 5);
+        var curveRandomnessEt = addEditRow(settingsPanel, "Curve randomness (0-1)", DEFAULTS.curveRandomness, 5);
         var seedEt = addEditRow(settingsPanel, "Random seed", DEFAULTS.seed, 7);
         var make3DCb = addCheckbox(settingsPanel, "Create 3D layers", DEFAULTS.make3D);
         var simultaneousRootCb = addCheckbox(settingsPanel, "Animate first ring simultaneously", DEFAULTS.simultaneousRoot);
         var smoothFlowCb = addCheckbox(settingsPanel, "Smooth continuous flow", DEFAULTS.smoothFlow);
+        var useCurvesCb = addCheckbox(settingsPanel, "Organic curved branches", DEFAULTS.useCurves);
 
         var compPanel = pal.add("panel", undefined, "Composition");
         compPanel.orientation = "column";
@@ -279,6 +288,8 @@
                 nodeDuration: readFloat(nodeDurationEt, DEFAULTS.nodeDuration, 0.05),
                 childStagger: readFloat(childStaggerEt, DEFAULTS.childStagger, 0),
                 randomOffset: Math.max(0, readFloat(randomOffsetEt, DEFAULTS.randomOffset, 0)),
+                curveTension: Math.max(0, Math.min(1, readFloat(curveTensionEt, DEFAULTS.curveTension, 0))),
+                curveRandomness: Math.max(0, Math.min(1, readFloat(curveRandomnessEt, DEFAULTS.curveRandomness, 0))),
                 seed: readInt(seedEt, DEFAULTS.seed, -2147483647, 2147483646),
                 useActiveComp: useActiveCompCb.value,
                 compName: compNameEt.text.length ? compNameEt.text : DEFAULTS.compName,
@@ -291,7 +302,8 @@
                 lineColor: parseColor(lineColorEt.text, DEFAULTS.lineColor),
                 make3D: make3DCb.value,
                 simultaneousRoot: simultaneousRootCb.value,
-                smoothFlow: smoothFlowCb.value
+                smoothFlow: smoothFlowCb.value,
+                useCurves: useCurvesCb.value
             };
         }
 
@@ -483,7 +495,52 @@
             "    var cLocal = fromComp(c);",
             "    var p2 = (pLocal.length > 2) ? [pLocal[0], pLocal[1]] : pLocal;",
             "    var c2 = (cLocal.length > 2) ? [cLocal[0], cLocal[1]] : cLocal;",
-            "    createPath([p2, c2], [], [], false);",
+            "    var ctrl = null;",
+            "    try {",
+            "      ctrl = thisComp.layer(\"" + CONTROL_NAMES.layer + "\");",
+            "    } catch (err) {}",
+            "    var useCurves = false;",
+            "    var tension = 0;",
+            "    var randomness = 0;",
+            "    if (ctrl) {",
+            "      try { useCurves = ctrl.effect(\"" + CONTROL_NAMES.curvesEnabled + "\")(\"Checkbox\") > 0; } catch (err) {}",
+            "      try { tension = ctrl.effect(\"" + CONTROL_NAMES.curveTension + "\")(\"Slider\") / 100; } catch (err) {}",
+            "      try { randomness = ctrl.effect(\"" + CONTROL_NAMES.curveRandomness + "\")(\"Slider\") / 100; } catch (err) {}",
+            "    }",
+            "    tension = Math.max(0, tension);",
+            "    randomness = Math.max(0, randomness);",
+            "    if (!useCurves || tension <= 0) {",
+            "      createPath([p2, c2], [], [], false);",
+            "    } else {",
+            "      var diffVec = [c2[0] - p2[0], c2[1] - p2[1]];",
+            "      var dist = Math.sqrt(diffVec[0] * diffVec[0] + diffVec[1] * diffVec[1]);",
+            "      if (dist == 0) {",
+            "        createPath([p2, c2], [], [], false);",
+            "      } else {",
+            "        var dir = [diffVec[0] / dist, diffVec[1] / dist];",
+            "        var perp = [-dir[1], dir[0]];",
+            "        seedRandom(index + 101, true);",
+            "        var dirSign = (random() < 0.5) ? -1 : 1;",
+            "        var variation = 1 + randomness * random(-1, 1);",
+            "        var bend = dist * tension * variation;",
+            "        var mid = [",
+            "          p2[0] + diffVec[0] * 0.5 + perp[0] * bend * 0.5 * dirSign,",
+            "          p2[1] + diffVec[1] * 0.5 + perp[1] * bend * 0.5 * dirSign",
+            "        ];",
+            "        var handleLen = dist / 3;",
+            "        var out0 = [",
+            "          dir[0] * handleLen + perp[0] * bend * 0.35 * dirSign,",
+            "          dir[1] * handleLen + perp[1] * bend * 0.35 * dirSign",
+            "        ];",
+            "        var in2 = [-out0[0], -out0[1]];",
+            "        var out1 = [",
+            "          dir[0] * handleLen * 0.25 + perp[0] * bend * 0.4 * dirSign,",
+            "          dir[1] * handleLen * 0.25 + perp[1] * bend * 0.4 * dirSign",
+            "        ];",
+            "        var in1 = [-out1[0], -out1[1]];",
+            "        createPath([p2, mid, c2], [[0, 0], in1, in2], [out0, out1, [0, 0]], false);",
+            "      }",
+            "    }",
             "  }",
             "}"
         ].join("\n");
@@ -550,7 +607,27 @@
         return effect ? effect.property("ADBE Slider Control-0001") : null;
     }
 
-    function ensureAnimationController(comp, totalDuration) {
+    function ensureCheckboxControl(layer, effectName) {
+        var effects = layer.property("ADBE Effect Parade");
+        if (!effects) {
+            return null;
+        }
+        var effect = null;
+        for (var i = 1; i <= effects.numProperties; i++) {
+            var candidate = effects.property(i);
+            if (candidate && candidate.name === effectName) {
+                effect = candidate;
+                break;
+            }
+        }
+        if (!effect) {
+            effect = effects.addProperty("ADBE Checkbox Control");
+            effect.name = effectName;
+        }
+        return effect ? effect.property("ADBE Checkbox Control-0001") : null;
+    }
+
+    function ensureAnimationController(comp, totalDuration, opts) {
         var controller = null;
         for (var i = 1; i <= comp.layers.length; i++) {
             var candidate = comp.layers[i];
@@ -576,6 +653,21 @@
             var startTime = comp.displayStartTime || 0;
             sliderProp.setValueAtTime(startTime, 0);
             sliderProp.setValueAtTime(startTime + totalDuration, 100);
+        }
+
+        var curvesCheckboxProp = ensureCheckboxControl(controller, CONTROL_NAMES.curvesEnabled);
+        if (curvesCheckboxProp) {
+            curvesCheckboxProp.setValue((opts && opts.useCurves) ? 1 : 0);
+        }
+        var tensionSliderProp = ensureSliderControl(controller, CONTROL_NAMES.curveTension);
+        if (tensionSliderProp) {
+            var tensionVal = (opts && typeof opts.curveTension === "number") ? opts.curveTension : DEFAULTS.curveTension;
+            tensionSliderProp.setValue(Math.max(0, Math.min(1, tensionVal)) * 100);
+        }
+        var randomnessSliderProp = ensureSliderControl(controller, CONTROL_NAMES.curveRandomness);
+        if (randomnessSliderProp) {
+            var randomnessVal = (opts && typeof opts.curveRandomness === "number") ? opts.curveRandomness : DEFAULTS.curveRandomness;
+            randomnessSliderProp.setValue(Math.max(0, Math.min(1, randomnessVal)) * 100);
         }
 
         return controller;
@@ -745,7 +837,7 @@
             maxTime = nodeDuration > 0 ? nodeDuration : 1;
         }
 
-        var controllerLayer = ensureAnimationController(comp, maxTime);
+        var controllerLayer = ensureAnimationController(comp, maxTime, opts);
         if (!controllerLayer) {
             return;
         }
